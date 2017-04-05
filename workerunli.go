@@ -79,11 +79,13 @@ func (this *WorkerPoolUnlimited) putWorker(worker *_workerunli) {
 }
 
 func (this *WorkerPoolUnlimited) quit() {
+	this.l.Lock()
 	for worker, _ := range this.workers {
 		worker.quit <- struct{}{}
 		close(worker.task)
 		close(worker.quit)
 	}
+	this.l.Unlock()
 }
 
 type _workerunli struct {
