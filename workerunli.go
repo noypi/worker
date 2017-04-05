@@ -19,7 +19,6 @@ func (this *WorkerPoolUnlimited) AddWork(task func()) (err error) {
 		this.workers = map[*_workerunli]struct{}{}
 	}
 
-	this.l.Lock()
 	worker := this.pool.Get().(*_workerunli)
 	if nil == worker.task {
 		worker.task = make(chan func(), 1)
@@ -36,12 +35,15 @@ func (this *WorkerPoolUnlimited) AddWork(task func()) (err error) {
 
 	if !worker.started {
 		worker.workerunli = this
+
+		this.l.Lock()
 		this.workers[worker] = struct{}{}
+		this.l.Unlock()
+
 		go worker.waitForJob()
 		worker.started = true
 
 	}
-	this.l.Unlock()
 
 	worker.task <- task
 
@@ -63,6 +65,8 @@ func (this *WorkerPoolUnlimited) newWorker() interface{} {
 
 func (this *WorkerPoolUnlimited) putWorker(worker *_workerunli) {
 	this.l.Lock()
+	delete(this.workers, worker)
+	this.l.Unlock()
 
 	close(worker.quit)
 	worker.quit = nil
@@ -71,11 +75,8 @@ func (this *WorkerPoolUnlimited) putWorker(worker *_workerunli) {
 	worker.task = nil
 
 	worker.started = false
-
-	delete(this.workers, worker)
 	this.pool.Put(worker)
 
-	this.l.Unlock()
 }
 
 func (this *WorkerPoolUnlimited) quit() {
