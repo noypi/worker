@@ -2,21 +2,24 @@ package worker
 
 import (
 	"fmt"
+	"sync/atomic"
 )
 
 type _taskch chan func()
 type _poolch chan _taskch
 
 type WorkerPool struct {
-	pool    _poolch
-	workers []*_worker
-	started bool
+	pool        _poolch
+	workers     []*_worker
+	started     bool
+	nActiveWork uint64
 }
 
 type _worker struct {
-	task _taskch
-	pool _poolch
-	quit chan struct{}
+	task        _taskch
+	pool        _poolch
+	quit        chan struct{}
+	pActiveWork *uint64
 }
 
 func (this *WorkerPool) Start(maxWorkers int) {
@@ -28,6 +31,7 @@ func (this *WorkerPool) Start(maxWorkers int) {
 		worker.pool = this.pool
 		worker.task = make(chan func(), 1)
 		worker.quit = make(chan struct{})
+		worker.pActiveWork = &this.nActiveWork
 		this.workers[i] = worker
 		go worker.waitForJob()
 	}
@@ -62,13 +66,19 @@ func (this *WorkerPool) AddWork(task func()) (err error) {
 	return nil
 }
 
+func (this *WorkerPool) ActiveWorksCount() int {
+	return int(atomic.LoadUint64(&this.nActiveWork))
+}
+
 func (this *_worker) waitForJob() {
 	for {
 		this.pool <- this.task
 
 		select {
 		case job := <-this.task:
+			atomic.AddUint64(this.pActiveWork, 1)
 			job()
+			atomic.AddUint64(this.pActiveWork, ^uint64(0))
 		case <-this.quit:
 			return
 		}
