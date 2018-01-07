@@ -58,10 +58,8 @@ func (this *WorkerPool) AddWork(task func()) (err error) {
 	if !this.started {
 		return fmt.Errorf("not started.")
 	}
-	go func() {
-		taskch := <-this.pool
-		taskch <- task
-	}()
+	taskch := <-this.pool
+	taskch <- task
 
 	return nil
 }
